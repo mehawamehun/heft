@@ -49,8 +49,8 @@ export function SiteNav() {
               to={link.href}
               aria-current={isActive(link.href) ? "page" : undefined}
               className={cx(
-                "border-b border-transparent py-1.5 text-[14.5px] text-foreground/75 transition-colors hover:border-border hover:text-foreground",
-                isActive(link.href) && "font-medium text-foreground",
+                "border-b border-transparent py-1.5 text-[14px] font-medium tracking-[-0.012em] text-foreground/70 transition-colors hover:border-border hover:text-foreground",
+                isActive(link.href) && "text-foreground",
               )}
             >
               {link.label}

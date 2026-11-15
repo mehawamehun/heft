@@ -3,12 +3,6 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { formatPrice, looks } from "@/data/catalog";
 import { Link } from "@/router";
 
-// ── Timing ──────────────────────────────────────────────────────────────────
-// Fast slide: 340 ms with an aggressive ease-out so the change of character
-// feels instant but still shows every figure moving together.
-const SLIDE_MS = 340;
-// We triple the slides so the wrap-around jump is invisible
-const COPIES = 3;
 const N = looks.length;
 
 type VisibleCount = 1 | 3 | 5;
@@ -39,12 +33,16 @@ function useVisibleCount() {
   return visible;
 }
 
-/** After sliding, snap cursor back into the middle copy so we can loop forever. */
-function wrapToMiddle(index: number) {
-  let next = index;
-  while (next < N) next += N;
-  while (next >= N * 2) next -= N;
-  return next;
+/**
+ * Shortest signed circular offset of look `li` from the active look.
+ * Lives in [-N/2, N/2) so an off-stage look is always parked on the side it
+ * will re-enter from — the buffer slots a cloned-track carousel would need,
+ * realised without any duplicate DOM. The loop can turn forever with no reset.
+ */
+function circularOffset(li: number, active: number) {
+  let d = (((li - active) % N) + N) % N;
+  if (d > N / 2) d -= N;
+  return d;
 }
 
 /** Pick the shortest circular path so clicking any dot feels instant. */
@@ -65,47 +63,42 @@ export function HeroCarousel() {
   const visible = useVisibleCount();
   const half = Math.floor(visible / 2);
 
-  // Cursor lives inside the triplicated list; middle copy starts at N.
-  const [cursor, setCursor] = useState(N);
-  const [animating, setAnimating] = useState(false);
-  const [instant, setInstant] = useState(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const jumpRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Unbounded cursor — never reset, never wrapped. Each slide resolves its
+  // own circular offset from it, so state changes only ever happen at the
+  // START of a move. Nothing re-renders after the animation ends.
+  const [active, setActive] = useState(0);
+  const logical = ((active % N) + N) % N;
+
+  // Exact slot width in px, measured from the real stage. Transforms are
+  // written directly as inline px values — never through a custom property —
+  // so the horizontal glide fires as a plain CSS transition in every browser.
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [gap, setGap] = useState(() =>
+    typeof window === "undefined" ? 288 : window.innerWidth / visible,
+  );
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.clientWidth;
+      if (w > 0) setGap(w / visible);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [visible]);
+
   const pointerRef = useRef<{ id: number; x: number } | null>(null);
   const swipedRef = useRef(false);
 
-  const logical = ((cursor % N) + N) % N;
-
+  // No animation lock: CSS transitions retarget mid-flight smoothly, so
+  // rapid clicks/swipes keep gliding in the requested direction.
   const go = (delta: number) => {
-    if (animating || delta === 0) return;
-    setAnimating(true);
-    setCursor((c) => c + delta);
-    if (timerRef.current) clearTimeout(timerRef.current);
-    if (jumpRef.current) clearTimeout(jumpRef.current);
-    timerRef.current = setTimeout(() => {
-      // Snap to the middle copy without animation so the loop is seamless.
-      setInstant(true);
-      setCursor((c) => wrapToMiddle(c));
-      jumpRef.current = setTimeout(() => {
-        setInstant(false);
-        setAnimating(false);
-      }, 20);
-    }, SLIDE_MS);
+    if (delta === 0) return;
+    setActive((current) => current + delta);
   };
-
-  useEffect(() => {
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (jumpRef.current) clearTimeout(jumpRef.current);
-    };
-  }, []);
-
-  const windowStart = cursor - half;
-  // Build the full triplicated list once; each entry carries its absolute index.
-  const slides = Array.from({ length: COPIES * N }, (_, index) => ({
-    index,
-    look: looks[index % N],
-  }));
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
@@ -119,7 +112,7 @@ export function HeroCarousel() {
     pointerRef.current = null;
     if (!start || start.id !== event.pointerId) return;
     const dx = event.clientX - start.x;
-    if (Math.abs(dx) < 40) return; // lower threshold for snappier swipe
+    if (Math.abs(dx) < 40) return;
     swipedRef.current = true;
     go(dx < 0 ? 1 : -1);
   };
@@ -140,8 +133,9 @@ export function HeroCarousel() {
           <ArrowLeft className="size-[19px] max-sm:size-[15px]" strokeWidth={1.7} />
         </button>
 
-        {/* ── Slide track ── */}
+        {/* ── Stage ── */}
         <div
+          ref={stageRef}
           role="group"
           aria-label="Look carousel"
           aria-roledescription="carousel"
@@ -154,73 +148,77 @@ export function HeroCarousel() {
           onPointerUp={onPointerUp}
           onPointerCancel={() => { pointerRef.current = null; }}
           className="relative h-full w-full overflow-hidden"
-          style={{ "--half": half, "--vis": visible } as CSSProperties}
+          style={{ "--vis": visible } as CSSProperties}
         >
-          <div
-            className={`hero-track${instant ? " hero-track--instant" : ""}`}
-            style={{ "--i": windowStart } as CSSProperties}
-          >
-            {slides.map(({ look, index }) => {
-              const offset = index - cursor;
-              const abs = Math.abs(offset);
-              const isCenter = offset === 0;
-              const isVisible = abs <= half;
+          {looks.map((look, li) => {
+            const d = circularOffset(li, logical);
+            const abs = Math.abs(d);
+            const isCenter = d === 0;
+            const isVisible = abs <= half;
 
-              return (
-                <Link
-                  key={`${index}-${look.slug}`}
-                  to={`/looks/${look.slug}`}
-                  aria-hidden={!isVisible ? true : undefined}
-                  tabIndex={!isVisible ? -1 : undefined}
-                  className="hero-slide"
-                  data-offset={offset}
-                  data-center={isCenter ? "true" : undefined}
-                  onClick={(e) => {
-                    if (swipedRef.current) {
-                      e.preventDefault();
-                      swipedRef.current = false;
-                      return;
-                    }
-                    // Clicking any non-centre character slides it to the centre.
-                    if (!isCenter) {
-                      e.preventDefault();
-                      go(offset);
-                    }
-                  }}
-                  style={
-                    {
-                      "--offset": offset,
-                      "--char-h": charHeight(abs, isCenter),
-                      "--opacity": isVisible
-                        ? isCenter ? 1 : Math.max(0.65, 1 - 0.14 * abs)
-                        : 0,
-                    } as CSSProperties
+            // One px-exact transform carries BOTH the centreing offset and
+            // the slot position, so every character travels the track in the
+            // interaction direction and lands precisely on its slot.
+            const tx = -gap / 2 + d * gap;
+
+            return (
+              <Link
+                key={look.slug}
+                to={`/looks/${look.slug}`}
+                data-look={look.slug}
+                aria-hidden={!isVisible ? true : undefined}
+                tabIndex={!isVisible ? -1 : undefined}
+                className="hero-slide"
+                data-center={isCenter ? "true" : undefined}
+                onClick={(e) => {
+                  if (swipedRef.current) {
+                    e.preventDefault();
+                    swipedRef.current = false;
+                    return;
                   }
-                >
-                  {/* Character image fills most of the slide height */}
-                  <span className="hero-figure">
-                    <span aria-hidden className="hero-cast" />
-                    <img
-                      src={look.image}
-                      alt={look.alt}
-                      loading={abs <= 2 ? "eager" : "lazy"}
-                      decoding="async"
-                      draggable={false}
-                      className="hero-character-img"
-                    />
-                  </span>
+                  // Clicking any non-centre character slides it to the centre.
+                  if (!isCenter) {
+                    e.preventDefault();
+                    go(d);
+                  }
+                }}
+                style={
+                  {
+                    width: gap,
+                    transform: `translateX(${tx.toFixed(2)}px)`,
+                    "--char-h": charHeight(abs, isCenter),
+                    "--opacity": isVisible
+                      ? isCenter ? 1 : Math.max(0.65, 1 - 0.14 * abs)
+                      : 0,
+                    zIndex: isCenter ? 30 : abs === 1 ? 20 : 10,
+                  } as CSSProperties
+                }
+              >
+                {/* Character image fills most of the slide height */}
+                <span className="hero-figure">
+                  <span aria-hidden className="hero-cast" />
+                  <img
+                    src={look.image}
+                    alt={look.alt}
+                    /* All 8 characters are eager: a parked slide re-entering
+                       the window must never pop its image in mid-glide. */
+                    loading="eager"
+                    decoding="async"
+                    draggable={false}
+                    className="hero-character-img"
+                  />
+                </span>
 
-                  {/* Label sits BELOW the shoes, outside / after the figure */}
-                  {isVisible && (
-                    <span className="hero-label">
-                      <span className="hero-label-name">{look.name}</span>
-                      <span className="hero-label-price">{formatPrice(look.price)}</span>
-                    </span>
-                  )}
-                </Link>
-              );
-            })}
-          </div>
+                {/* Label sits BELOW the shoes, outside / after the figure */}
+                {isVisible && (
+                  <span className="hero-label">
+                    <span className="hero-label-name">{look.name}</span>
+                    <span className="hero-label-price">{formatPrice(look.price)}</span>
+                  </span>
+                )}
+              </Link>
+            );
+          })}
         </div>
 
         {/* ── Next arrow ── */}
@@ -252,8 +250,8 @@ export function HeroCarousel() {
       {/* ── Collection bar ── */}
       <div className="glass mx-[var(--gutter)] mt-2 flex h-[74px] items-center justify-between gap-4 rounded-[20px] pl-[22px] pr-3 max-md:h-auto max-md:flex-col max-md:items-stretch max-md:gap-2.5 max-md:px-4 max-md:py-3.5">
         <div className="flex min-w-0 items-baseline gap-4">
-          <span className="whitespace-nowrap text-[15px] font-semibold tracking-tight">Fall / Winter 26</span>
-          <span className="whitespace-nowrap text-[13.5px] tabular-nums text-foreground/55">
+          <span className="whitespace-nowrap text-[15px] font-bold tracking-[-0.01em]">Fall / Winter 26</span>
+          <span className="whitespace-nowrap text-[13px] font-normal tabular-nums tracking-[0.01em] text-foreground/55">
             {looks.length} looks
           </span>
         </div>

@@ -2,49 +2,26 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Satoshi — the single editorial sans for the whole storefront.
+   Variable file covers 300–700; statics guarantee true Bold/Black. */
 @font-face {
   font-family: "Satoshi";
   src: url("./assets/fonts/Satoshi-Variable.woff2") format("woff2");
-  font-weight: 300 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* Pally — body / UI face. Clean geometric sans, very legible at small sizes. */
-@font-face {
-  font-family: "Pally";
-  src: url("./assets/fonts/Pally-Variable.woff2") format("woff2");
-  font-weight: 400 700;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* Unique — display face for headings and the wordmark. */
-@font-face {
-  font-family: "Unique";
-  src: url("./assets/fonts/Unique-Regular.woff2") format("woff2");
-  font-weight: 400;
+  font-weight: 300 700;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Unique";
-  src: url("./assets/fonts/Unique-Medium.woff2") format("woff2");
-  font-weight: 500;
+  font-family: "Satoshi";
+  src: url("./assets/fonts/Satoshi-Bold.woff2") format("woff2");
+  font-weight: 700 800;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: "Unique";
-  src: url("./assets/fonts/Unique-SemiBold.woff2") format("woff2");
-  font-weight: 600;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: "Unique";
-  src: url("./assets/fonts/Unique-Bold.woff2") format("woff2");
-  font-weight: 700;
+  font-family: "Satoshi";
+  src: url("./assets/fonts/Satoshi-Black.woff2") format("woff2");
+  font-weight: 900;
   font-style: normal;
   font-display: swap;
 }
@@ -52,8 +29,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-heading: "Unique", "Satoshi", ui-sans-serif, system-ui, sans-serif;
-    --font-sans: "Pally", "Satoshi", ui-sans-serif, system-ui, sans-serif;
+    --font-heading: "Satoshi", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -157,7 +134,7 @@
     font-family: var(--font-sans);
     font-size: 16px;
     line-height: 1.55;
-    letter-spacing: 0;
+    letter-spacing: -0.01em;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     background-color: #FCFDFE;
@@ -229,9 +206,9 @@
     font-weight: 600;
   }
   .wordmark {
-    font-size: 16px;
+    font-size: 16.5px;
     font-weight: 700;
-    letter-spacing: 0.16em;
+    letter-spacing: 0.14em;
     display: inline-flex;
     align-items: flex-start;
   }
@@ -389,42 +366,30 @@
     }
   }
 
-  /* ── Sliding track ── */
-  /*
-   * The track contains ALL slides. We translate it so the window of visible
-   * slides (--vis wide) is centred. The formula shifts the track left by
-   * (windowStart / totalSlides) of its natural width, then each slide
-   * is sized to 1/vis of the viewport width.
-   *
-   * We use the simpler approach: each slide has a fixed width of (100%/vis)
-   * of the VIEWPORT, and the track translates by --i × that width.
+  /* ── Sliding stage ──
+   * Each slide is positioned by its CIRCULAR offset from the active look.
+   * The px transform is written INLINE by React (centreing + slot offset in
+   * one value), so movement is a plain CSS transition — universally reliable,
+   * never a var()-indirect value that a browser could fail to interpolate.
+   * Slides render once and never remount; there is no track and no reset.
    */
-  .hero-track {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    height: 100%;
-    will-change: transform;
-    transform: translate3d(calc(var(--i, 0) * -100% / var(--vis, 5)), 0, 0);
-    transition: transform var(--hero-ms, 380ms) cubic-bezier(0.24, 0.9, 0.32, 1);
-  }
-  .hero-track--instant {
-    transition: none !important;
-  }
-
-  /* ── Individual slide ── */
   .hero-slide {
-    position: relative;
-    flex: 0 0 calc(100% / var(--vis, 5));
-    min-width: 0;
-    height: 100%;
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 50%;
+    /* width + transform are inline px (measured). This is a fallback only. */
+    width: calc(100% / var(--vis, 5));
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-end;
     padding: 0 6px 14px;
     opacity: var(--opacity, 1);
-    transition: opacity var(--hero-ms, 380ms) cubic-bezier(0.24, 0.9, 0.32, 1);
+    transition:
+      transform 0.91s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
     cursor: pointer;
     text-decoration: none;
     color: inherit;
@@ -444,7 +409,7 @@
     flex: 1 1 0;
     min-height: 0;
     width: 100%;
-    transition: height var(--hero-ms, 380ms) cubic-bezier(0.24, 0.9, 0.32, 1);
+    transition: height 0.55s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .hero-character-img {
@@ -455,6 +420,16 @@
     object-position: bottom center;
     pointer-events: none;
     user-select: none;
+    /* Scale animates on the SAME 0.55s curve as the slide translate, so the
+       centre character grows exactly in sync with the horizontal slide. */
+    transform-origin: bottom center;
+    transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  /* The active look stands out: scaled up from the feet so they stay planted
+     on the stage baseline. Side characters remain untouched. */
+  .hero-slide[data-center="true"] .hero-character-img {
+    transform: scale(1.15);
   }
 
   .hero-cast {
@@ -471,7 +446,7 @@
       rgba(12, 18, 24, 0.03) 50%,
       rgba(12, 18, 24, 0) 78%
     );
-    transition: opacity var(--hero-ms, 380ms) cubic-bezier(0.24, 0.9, 0.32, 1);
+    transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1);
     opacity: var(--opacity, 1);
     pointer-events: none;
   }
@@ -498,13 +473,14 @@
     white-space: nowrap;
     font-size: 13.5px;
     font-weight: 600;
-    letter-spacing: 0.002em;
+    letter-spacing: -0.012em;
   }
   .hero-label-price {
     font-variant-numeric: tabular-nums;
     color: rgba(12, 18, 24, 0.55);
     font-weight: 500;
-    font-size: 12.5px;
+    font-size: 12px;
+    letter-spacing: 0.01em;
   }
   /* Side characters: quieter label so the eye stays on the centre look */
   .hero-slide:not([data-center="true"]) .hero-label {
@@ -650,14 +626,14 @@
     transition-duration: 1ms !important;
     animation-duration: 1ms !important;
   }
-  .hero-track,
+  /* The hero slide IS the product interaction — under reduced motion we keep
+     a short 160 ms glide (perceptible, but no long travel) instead of an
+     instant swap, so the direction of change is still readable. */
   .hero-slide,
   .hero-figure,
+  .hero-character-img,
   .hero-cast,
   .hero-label {
-    transition-duration: 1000ms !important;
-  }
-  .hero-track--instant {
-    transition-duration: 0ms !important;
+    transition-duration: 160ms !important;
   }
 }
