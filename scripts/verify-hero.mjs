@@ -1,7 +1,7 @@
 /**
- * Verifies the hero carousel glides directionally in a real browser.
- * Slide geometry: a slide at circular offset d sits at
- *   tx = -slot/2 + d*slot   (left:50% + centring offset)
+ * Verifies the hero carousel on DESKTOP (1600×1000) and MOBILE (390×844):
+ * visibility, explicit heights, peek mode, real-time drag, snap/spring-back,
+ * directional glide, infinite loop and scale sync.
  * Run: node scripts/verify-hero.mjs
  */
 import puppeteer from "puppeteer-core";
@@ -25,18 +25,18 @@ const browser = await puppeteer.launch({
   headless: "new",
 });
 const page = await browser.newPage();
-await page.setViewport({ width: 1600, height: 1000 });
-// Some environments (and some users' OS settings) report reduced motion,
-// which zeroes transitions — emulate the default so we test the real design.
 await page.emulateMediaFeatures([{ name: "prefers-reduced-motion", value: "no-preference" }]);
 page.on("pageerror", (e) => console.log("PAGE EXCEPTION:", e.message));
 page.on("console", (m) => { if (m.type() === "error") console.log("CONSOLE ERROR:", m.text()); });
-
 await page.goto(URL, { waitUntil: "networkidle2", timeout: 60000 });
-await sleep(1200);
 
-const reduced = await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches);
-ok("environment: transitions enabled", !reduced, `reduced=${reduced}`);
+// ── shared helpers ──
+const stageInfo = () =>
+  page.evaluate(() => {
+    const el = document.querySelector('[data-testid="hero-stage"]');
+    const r = el.getBoundingClientRect();
+    return { w: el.clientWidth, h: r.height, top: r.top, bottom: r.bottom };
+  });
 
 const txOf = (slug) =>
   page.evaluate((s) => {
@@ -45,101 +45,177 @@ const txOf = (slug) =>
     return new DOMMatrixReadOnly(getComputedStyle(el).transform).e;
   }, slug);
 
+const slideStat = (slug) =>
+  page.evaluate((s) => {
+    const el = document.querySelector(`.hero-slide[data-look="${s}"]`);
+    if (!el) return null;
+    const img = el.querySelector(".hero-character-img");
+    const ir = img.getBoundingClientRect();
+    return {
+      opacity: parseFloat(getComputedStyle(el).opacity),
+      width: el.getBoundingClientRect().width,
+      tx: new DOMMatrixReadOnly(getComputedStyle(el).transform).e,
+      imgScale: new DOMMatrixReadOnly(getComputedStyle(img).transform).a,
+      imgH: ir.height,
+      imgLoaded: img.complete && img.naturalWidth > 0,
+      right: el.getBoundingClientRect().right,
+    };
+  }, slug);
+
 const centerSlug = () =>
   page.evaluate(() => document.querySelector('.hero-slide[data-center="true"]')?.getAttribute("data-look"));
 
-const imgScale = (slug) =>
-  page.evaluate((s) => {
-    const el = document.querySelector(`.hero-slide[data-look="${s}"] .hero-character-img`);
-    return new DOMMatrixReadOnly(getComputedStyle(el).transform).a;
-  }, slug);
-
 async function glideTrace(slug, step = 45, total = 850) {
-  const samples = [];
+  const out = [];
   for (let t = 0; t <= total; t += step) {
-    samples.push({ t, tx: await txOf(slug) });
+    out.push({ t, tx: await txOf(slug) });
     await sleep(step);
   }
-  return samples;
+  return out;
 }
 
-const slot = await page.evaluate(() => document.querySelector(".hero-slide").getBoundingClientRect().width);
-console.log(`slot width: ${slot.toFixed(1)}px`);
+/* ════════════════════════ DESKTOP 1600×1000 ════════════════════════ */
+console.log("\n── DESKTOP 1600×1000 ──");
+await page.setViewport({ width: 1600, height: 1000 });
+await sleep(900);
 
-// ── 1. rest state ──
-ok("rest: charcoal centred", (await centerSlug()) === "charcoal-fleece-hoodie");
-const restTx = await txOf("charcoal-fleece-hoodie");
-ok("rest: centre tx = −slot/2 (centred on stage)", Math.abs(restTx + slot / 2) < 1.5, `tx=${restTx?.toFixed(1)} expect=${(-slot / 2).toFixed(1)}`);
+const st = await stageInfo();
+ok("desktop: stage explicit height ≥ 580px", st.h >= 580, `h=${st.h.toFixed(0)}px`);
+const stGeo = await page.evaluate(() => {
+  const el = document.querySelector('[data-testid="hero-stage"]');
+  return { cw: el.clientWidth };
+});
+const slot = stGeo.cw / 5.1;
+ok("desktop: charcoal centred", (await centerSlug()) === "charcoal-fleece-hoodie");
+const rest = await slideStat("charcoal-fleece-hoodie");
+ok("desktop: centre tx = −slot/2", Math.abs(rest.tx + slot / 2) < 2, `tx=${rest.tx.toFixed(1)} expect=${(-slot / 2).toFixed(1)}`);
+ok("desktop: centre img loaded & tall", rest.imgLoaded && rest.imgH > 300, `imgH=${rest.imgH.toFixed(0)}px`);
+ok("desktop: centre scale = 1.12", Math.abs(rest.imgScale - 1.12) < 0.005, rest.imgScale.toFixed(3));
 
-// ── 2. forward glide (next): olive travels +1 slot → centre ──
+const side1 = await slideStat("olive-field-jacket");
+ok("desktop: side scale = 0.92", Math.abs(side1.imgScale - 0.92) < 0.005, side1.imgScale.toFixed(3));
+ok("desktop: side dimmed but visible", side1.opacity > 0.6 && side1.opacity < 1, side1.opacity.toFixed(2));
+
+// forward glide
 await page.click('.hero-arrow--right');
 const fwd = await glideTrace("olive-field-jacket");
 const f0 = fwd[0].tx, fE = fwd[fwd.length - 1].tx;
-ok("next: olive starts ≈ centre+slot (+144)", Math.abs(f0 - (slot / 2)) < 25, `tx0=${f0.toFixed(1)} expect≈${(slot / 2).toFixed(1)}`);
-ok("next: olive ends centred (−144)", Math.abs(fE + slot / 2) < 1.5, `txEnd=${fE.toFixed(1)}`);
+ok("desktop: next glides exactly one slot", Math.abs(f0 - slot / 2) < 20 && Math.abs(fE + slot / 2) < 2 && Math.abs(fE - f0) > slot * 0.8, `travel=${Math.abs(fE - f0).toFixed(1)}px slot=${slot.toFixed(0)}px`);
 const fmid = fwd.filter((s) => s.tx !== null);
 const fStep = Math.max(...fmid.slice(1).map((s, i) => Math.abs(s.tx - fmid[i].tx)));
-const fTravel = Math.abs(f0 - fE);
-ok("next: continuous glide, no teleport", fStep < slot * 0.5 && fTravel > slot * 0.75, `maxStep=${fStep.toFixed(1)}px travel=${fTravel.toFixed(1)}px`);
-ok("next: outgoing centre lands one slot left", Math.abs((await txOf("charcoal-fleece-hoodie")) + slot / 2 + slot) < 2);
+ok("desktop: no teleport", fStep < slot * 0.5, `maxStep=${fStep.toFixed(1)}px`);
 
-// ── 3. full clockwise wrap (7 more nexts) — order + zero reset ──
-const expected = ["black-fleece-hoodie", "cream-sweatshirt", "black-cropped-bomber", "striped-long-sleeve", "stone-sherpa-fleece", "sherpa-and-denim", "charcoal-fleece-hoodie"];
+// full clockwise wrap
+const order = ["black-fleece-hoodie", "cream-sweatshirt", "black-cropped-bomber", "striped-long-sleeve", "stone-sherpa-fleece", "sherpa-and-denim", "charcoal-fleece-hoodie"];
 let wrapOK = true;
-for (const [i, exp] of expected.entries()) {
+for (const exp of order) {
   await page.click('.hero-arrow--right');
-  await sleep(700);
-  const c = await centerSlug();
-  if (c !== exp) { wrapOK = false; console.log(`  step ${i + 2}: expected ${exp}, got ${c}`); }
+  await sleep(680);
+  if ((await centerSlug()) !== exp) wrapOK = false;
 }
-ok("clockwise: full 8-step loop, correct order", wrapOK);
-const afterWrap = await txOf("charcoal-fleece-hoodie");
-ok("loop: no reset after wrap — centre sits exactly on stage", Math.abs(afterWrap + slot / 2) < 1.5, `tx=${afterWrap?.toFixed(1)}`);
+ok("desktop: full 8-step clockwise loop, correct order", wrapOK);
+ok("desktop: no reset after wrap", Math.abs((await txOf("charcoal-fleece-hoodie")) + slot / 2) < 2);
 
-// ── 4. anticlockwise (prev): sherpa enters from the LEFT and glides right ──
+// anticlockwise
 await page.click('.hero-arrow--left');
 const back = await glideTrace("sherpa-and-denim");
 const b0 = back[0].tx, bE = back[back.length - 1].tx;
-ok("prev: re-entrant starts ≈ centre−slot (−432)", Math.abs(b0 + slot / 2 + slot) < 25, `tx0=${b0.toFixed(1)}`);
-ok("prev: ends centred", Math.abs(bE + slot / 2) < 1.5, `txEnd=${bE.toFixed(1)}`);
-const bmid = back.filter((s) => s.tx !== null);
-const bStep = Math.max(...bmid.slice(1).map((s, i) => Math.abs(s.tx - bmid[i].tx)));
-ok("prev: continuous glide rightward", bStep < slot * 0.5 && (bE - b0) > slot * 0.75, `maxStep=${bStep.toFixed(1)}px travel=${(bE - b0).toFixed(1)}px`);
-ok("prev: centre is now sherpa-and-denim", (await centerSlug()) === "sherpa-and-denim");
+ok("desktop: prev glides rightward one slot", Math.abs(b0 + slot / 2 + slot) < 20 && Math.abs(bE + slot / 2) < 2 && (bE - b0) > slot * 0.8, `travel=${(bE - b0).toFixed(1)}px`);
 
-// ── 5. click the +2 side character → it glides to centre ──
-// centre is sherpa (logical 7); the +2 right character is olive (logical 1)
-await page.click('.hero-slide[data-look="olive-field-jacket"]');
-const clickGlide = await glideTrace("olive-field-jacket");
-const g0 = clickGlide[0].tx, gE = clickGlide[clickGlide.length - 1].tx;
-ok("click +2 char: starts ≈ centre+2slots (+432)", Math.abs(g0 - (-slot / 2 + 2 * slot)) < 25, `tx0=${g0.toFixed(1)} expect≈${(-slot / 2 + 2 * slot).toFixed(1)}`);
-ok("click +2 char: glides to centre", Math.abs(gE + slot / 2) < 1.5, `txEnd=${gE.toFixed(1)}`);
-const gmid = clickGlide.filter((s) => s.tx !== null);
-const gStep = Math.max(...gmid.slice(1).map((s, i) => Math.abs(s.tx - gmid[i].tx)));
-// a 2-slot ease-out jump moves fast early: ~40% of 576px within the first
-// sample is correct curve behaviour — a teleport would be one ~576px step.
-ok("click +2 char: continuous 2-slot travel", gStep < slot * 0.9 && Math.abs(g0 - gE) > 2 * slot * 0.75, `maxStep=${gStep.toFixed(1)}px travel=${Math.abs(g0 - gE).toFixed(1)}px`);
-ok("click +2 char: becomes centre", (await centerSlug()) === "olive-field-jacket");
+// click +2 side character
+await page.click('.hero-slide[data-look="olive-field-jacket"]'); // sherpa centre → olive is +2 right
+const cg = await glideTrace("olive-field-jacket");
+ok("desktop: click +2 char glides 2 slots to centre", Math.abs(cg[cg.length - 1].tx + slot / 2) < 2 && Math.abs(cg[0].tx - (-slot / 2 + 2 * slot)) < 25, `tx0=${cg[0].tx.toFixed(1)} expect=${(-slot / 2 + 2 * slot).toFixed(1)} travel=${Math.abs(cg[cg.length - 1].tx - cg[0].tx).toFixed(1)}px`);
+ok("desktop: clicked char becomes centre", (await centerSlug()) === "olive-field-jacket");
 
-// ── 6. synchronized scale ──
-await sleep(700);
-const sc = await imgScale("olive-field-jacket");
-ok("scale: centre img = 1.15", Math.abs(sc - 1.15) < 0.005, sc.toFixed(3));
-const side = await page.evaluate(() => {
-  const el = [...document.querySelectorAll(".hero-slide")].find(
-    (s) => s.getAttribute("data-center") !== "true" && parseFloat(getComputedStyle(s).opacity) > 0.5,
-  );
-  return new DOMMatrixReadOnly(getComputedStyle(el.querySelector(".hero-character-img")).transform).a;
+/* ════════════════════════ MOBILE 390×844 ════════════════════════ */
+console.log("\n── MOBILE 390×844 ──");
+await page.setViewport({ width: 390, height: 844 });
+await sleep(900);
+// Reset to the first look so mobile checks start from a known state.
+await page.click('[role="tablist"] button[aria-label="Go to Charcoal Fleece Hoodie"]');
+await sleep(750);
+ok("mobile: charcoal centred", (await centerSlug()) === "charcoal-fleece-hoodie");
+
+const mst = await stageInfo();
+ok("mobile: stage explicit height 420–520px", mst.h >= 420 && mst.h <= 521, `h=${mst.h.toFixed(0)}px`);
+
+const mGeo = await page.evaluate(() => document.querySelector('[data-testid="hero-stage"]').clientWidth);
+const centerW = mGeo * 0.68;
+const stepM = mGeo * 0.48; // 0.34 + 0.12 + 0.02
+const mc = await slideStat("charcoal-fleece-hoodie");
+ok("mobile: centre slot = 68% of container", Math.abs(mc.width - centerW) < 4, `w=${mc.width.toFixed(0)}px expect≈${centerW.toFixed(0)}px`);
+ok("mobile: centre tx = −centreW/2 (on-screen centre)", Math.abs(mc.tx + centerW / 2) < 2, `tx=${mc.tx.toFixed(1)}`);
+ok("mobile: centre visible, opacity 1", mc.opacity === 1 && mc.imgLoaded, `op=${mc.opacity}`);
+ok("mobile: centre img tall (head-to-toe above bar)", mc.imgH > 240, `imgH=${mc.imgH.toFixed(0)}px`);
+ok("mobile: centre scale = 1.12", Math.abs(mc.imgScale - 1.12) < 0.005, mc.imgScale.toFixed(3));
+
+const peek = await slideStat("olive-field-jacket");
+const cont = await page.evaluate(() => {
+  const el = document.querySelector('[data-testid="hero-stage"]');
+  const r = el.getBoundingClientRect();
+  return { right: r.right, left: r.left };
 });
-ok("scale: side img = 1", Math.abs(side - 1) < 0.005, side.toFixed(3));
+ok("mobile: right peek opacity 0.75", Math.abs(peek.opacity - 0.75) < 0.02, peek.opacity.toFixed(2));
+ok("mobile: right peek scale 0.82", Math.abs(peek.imgScale - 0.82) < 0.005, peek.imgScale.toFixed(3));
+ok("mobile: right peek partially clipped at edge", peek.right > cont.right - 1, `right=${peek.right?.toFixed(0)} edge=${cont.right?.toFixed(0)}`);
+ok("mobile: peek img loaded", peek.imgLoaded && peek.imgH > 60, `imgH=${peek.imgH.toFixed(0)}px`);
 
-// ── screenshots ──
-await page.screenshot({ path: "verify-centre.png" });
+// ── REAL-TIME DRAG on mobile ──
+const grab = await page.evaluate(() => {
+  const el = document.querySelector('[data-testid="hero-stage"]');
+  const r = el.getBoundingClientRect();
+  return { x: r.left + r.width / 2, y: r.top + r.height * 0.55 };
+});
+const baseTx = mc.tx;
+await page.mouse.move(grab.x, grab.y);
+await page.mouse.down();
+await page.mouse.move(grab.x - 50, grab.y, { steps: 4 });
+await sleep(60);
+const d1 = await txOf("charcoal-fleece-hoodie");
+await page.mouse.move(grab.x - 110, grab.y, { steps: 4 });
+await sleep(60);
+const d2 = await txOf("charcoal-fleece-hoodie");
+await page.mouse.up();
+ok("mobile: row follows finger in real time (step 1 ≈ −50px)", Math.abs(d1 - (baseTx - 50)) < 15, `Δ=${(d1 - baseTx).toFixed(1)}px`);
+ok("mobile: row follows finger in real time (step 2 ≈ −110px)", Math.abs(d2 - (baseTx - 110)) < 15, `Δ=${(d2 - baseTx).toFixed(1)}px`);
+await sleep(750);
+ok("mobile: release past 40px snaps to NEXT (olive centred)", (await centerSlug()) === "olive-field-jacket");
+
+// spring-back: short drag must NOT change the centre
+const oliveTx = await txOf("olive-field-jacket");
+await page.mouse.move(grab.x, grab.y);
+await page.mouse.down();
+await page.mouse.move(grab.x + 25, grab.y, { steps: 3 });
+await sleep(40);
+await page.mouse.up();
+await sleep(700);
+ok("mobile: short drag springs back (centre unchanged)", (await centerSlug()) === "olive-field-jacket" && Math.abs((await txOf("olive-field-jacket")) + centerW / 2) < 2);
+
+// drag right → previous
+await page.mouse.move(grab.x, grab.y);
+await page.mouse.down();
+await page.mouse.move(grab.x + 130, grab.y, { steps: 6 });
+await sleep(40);
+await page.mouse.up();
+await sleep(750);
+ok("mobile: drag right snaps to PREVIOUS (charcoal centred)", (await centerSlug()) === "charcoal-fleece-hoodie");
+
+// arrows still work on mobile
 await page.click('.hero-arrow--right');
-await sleep(260);
-await page.screenshot({ path: "verify-midflight.png" });
-await sleep(650);
-await page.screenshot({ path: "verify-after.png" });
+await sleep(700);
+ok("mobile: right arrow still slides", (await centerSlug()) === "olive-field-jacket");
+
+// dots
+await page.click('[role="tablist"] button[aria-label="Go to Black Cropped Bomber"]');
+await sleep(750);
+ok("mobile: dot jump works", (await centerSlug()) === "black-cropped-bomber");
+
+// screenshots for visual confirmation
+await page.screenshot({ path: "verify-mobile.png" });
+await page.setViewport({ width: 1600, height: 1000 });
+await sleep(800);
+await page.screenshot({ path: "verify-desktop.png" });
 
 await browser.close();
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);

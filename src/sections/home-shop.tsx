@@ -17,10 +17,10 @@ export function HomeShop() {
     <section
       aria-labelledby="home-shop-title"
       id="shop"
-      className="scroll-mt-[100px] px-[var(--gutter)] pt-7"
+      className="scroll-mt-[100px] px-[var(--gutter)] pt-5"
     >
       <div className="surface p-[clamp(20px,2.6vw,34px)]">
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-6">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-6">
           <h2 id="home-shop-title" className="display-sm">
             Shop
           </h2>

@@ -334,52 +334,41 @@
   }
 
   /* ── Hero section shell ── */
+  /* Height is carried by the stage's own explicit clamp — the section NEVER
+     derives height from content, so the characters can never collapse. */
   .hero-section {
-    height: min(960px, 100svh);
-  }
-  @media (max-width: 768px) {
-    .hero-section {
-      height: auto;
-    }
+    height: auto;
   }
 
-  /* ── Character stage (holds the track + buttons) ── */
+  /* ── Character stage: explicit, responsive, never 0 ── */
   .hero-stage {
-    min-height: 0;
-    flex: 1;
-    padding-left: clamp(52px, 5vw, 88px);
-    padding-right: clamp(52px, 5vw, 88px);
+    position: relative;
+    height: clamp(580px, 66svh, 840px);
+    padding-left: clamp(48px, 5vw, 88px);
+    padding-right: clamp(48px, 5vw, 88px);
   }
-  @media (max-width: 768px) {
+  @media (max-width: 767.98px) {
     .hero-stage {
-      height: min(540px, 64vh);
-      flex: none;
-      padding-left: 44px;
-      padding-right: 44px;
-    }
-  }
-  @media (max-width: 480px) {
-    .hero-stage {
-      height: min(460px, 70vh);
-      padding-left: 36px;
-      padding-right: 36px;
+      height: clamp(420px, 52svh, 520px);
+      min-height: 420px;
+      padding-left: 16px;
+      padding-right: 16px;
     }
   }
 
   /* ── Sliding stage ──
    * Each slide is positioned by its CIRCULAR offset from the active look.
-   * The px transform is written INLINE by React (centreing + slot offset in
-   * one value), so movement is a plain CSS transition — universally reliable,
-   * never a var()-indirect value that a browser could fail to interpolate.
-   * Slides render once and never remount; there is no track and no reset.
+   * The px transform + width are written INLINE by React (centreing + slot
+   * offset in one value), so movement is a plain CSS transition — universally
+   * reliable. Slides render once and never remount; there is no track/reset.
    */
   .hero-slide {
     position: absolute;
     top: 0;
     bottom: 0;
     left: 50%;
-    /* width + transform are inline px (measured). This is a fallback only. */
-    width: calc(100% / var(--vis, 5));
+    /* width + transform are inline px (measured). Fallback only. */
+    width: 20%;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -387,13 +376,22 @@
     padding: 0 6px 14px;
     opacity: var(--opacity, 1);
     transition:
-      transform 0.91s cubic-bezier(0.22, 1, 0.36, 1),
-      opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+      transform 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+      opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1),
+      width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
     will-change: transform;
     cursor: pointer;
     text-decoration: none;
     color: inherit;
     touch-action: pan-y;
+  }
+
+  /* While the pointer is down, transitions are OFF so the row follows the
+     finger/cursor exactly; on release they are restored for the snap. */
+  .hero-stage--dragging .hero-slide,
+  .hero-stage--dragging .hero-figure,
+  .hero-stage--dragging .hero-character-img {
+    transition: none !important;
   }
 
   .hero-slide[data-center="true"] {
@@ -409,10 +407,14 @@
     flex: 1 1 0;
     min-height: 0;
     width: 100%;
-    transition: height 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: height 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .hero-character-img {
+    /* Hard guarantees: the model is always rendered, full box, head to toe. */
+    display: block;
+    visibility: visible;
+    opacity: 1;
     height: 100%;
     width: auto;
     max-width: 100%;
@@ -420,16 +422,11 @@
     object-position: bottom center;
     pointer-events: none;
     user-select: none;
-    /* Scale animates on the SAME 0.55s curve as the slide translate, so the
-       centre character grows exactly in sync with the horizontal slide. */
+    /* Scale rides the SAME 0.5s curve as the slide translate, so the centre
+       character grows exactly in sync with the horizontal glide. */
+    transform: scale(var(--char-scale, 1));
     transform-origin: bottom center;
-    transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  /* The active look stands out: scaled up from the feet so they stay planted
-     on the stage baseline. Side characters remain untouched. */
-  .hero-slide[data-center="true"] .hero-character-img {
-    transform: scale(1.15);
+    transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   .hero-cast {
@@ -446,7 +443,7 @@
       rgba(12, 18, 24, 0.03) 50%,
       rgba(12, 18, 24, 0) 78%
     );
-    transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+    transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1);
     opacity: var(--opacity, 1);
     pointer-events: none;
   }
