@@ -10,10 +10,41 @@
   font-display: swap;
 }
 
+/* Pally — body / UI face. Clean geometric sans, very legible at small sizes. */
 @font-face {
-  font-family: "Chillax";
-  src: url("./assets/fonts/Chillax-Variable.woff2") format("woff2");
-  font-weight: 200 700;
+  font-family: "Pally";
+  src: url("./assets/fonts/Pally-Variable.woff2") format("woff2");
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Unique — display face for headings and the wordmark. */
+@font-face {
+  font-family: "Unique";
+  src: url("./assets/fonts/Unique-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Unique";
+  src: url("./assets/fonts/Unique-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Unique";
+  src: url("./assets/fonts/Unique-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Unique";
+  src: url("./assets/fonts/Unique-Bold.woff2") format("woff2");
+  font-weight: 700;
   font-style: normal;
   font-display: swap;
 }
@@ -21,8 +52,8 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-    --font-heading: "Chillax", "Satoshi", ui-sans-serif, system-ui, sans-serif;
-    --font-sans: "Satoshi", ui-sans-serif, system-ui, sans-serif;
+    --font-heading: "Unique", "Satoshi", ui-sans-serif, system-ui, sans-serif;
+    --font-sans: "Pally", "Satoshi", ui-sans-serif, system-ui, sans-serif;
     --color-sidebar-ring: var(--sidebar-ring);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -117,6 +148,7 @@
     }
   h1, h2, h3, .display, .display-sm, .wordmark {
     font-family: var(--font-heading);
+    font-weight: 600;
   }
   body {
     @apply bg-background text-foreground;
@@ -124,8 +156,8 @@
     min-height: 100svh;
     font-family: var(--font-sans);
     font-size: 16px;
-    line-height: 1.5;
-    letter-spacing: -0.011em;
+    line-height: 1.55;
+    letter-spacing: 0;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
     background-color: #FCFDFE;
@@ -185,21 +217,21 @@
   }
 
   .display {
-    font-size: clamp(44px, 5.2vw, 78px);
-    line-height: 0.92;
-    letter-spacing: -0.045em;
-    font-weight: 500;
+    font-size: clamp(40px, 5vw, 76px);
+    line-height: 0.93;
+    letter-spacing: -0.03em;
+    font-weight: 600;
   }
   .display-sm {
-    font-size: clamp(30px, 3.3vw, 48px);
-    line-height: 0.98;
-    letter-spacing: -0.038em;
-    font-weight: 500;
+    font-size: clamp(28px, 3.2vw, 46px);
+    line-height: 1.0;
+    letter-spacing: -0.026em;
+    font-weight: 600;
   }
   .wordmark {
     font-size: 16px;
-    font-weight: 600;
-    letter-spacing: 0.18em;
+    font-weight: 700;
+    letter-spacing: 0.16em;
     display: inline-flex;
     align-items: flex-start;
   }
@@ -374,7 +406,7 @@
     height: 100%;
     will-change: transform;
     transform: translate3d(calc(var(--i, 0) * -100% / var(--vis, 5)), 0, 0);
-    transition: transform 1000ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform var(--hero-ms, 380ms) cubic-bezier(0.24, 0.9, 0.32, 1);
   }
   .hero-track--instant {
     transition: none !important;
@@ -389,10 +421,10 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: 8px 6px 10px;
+    justify-content: flex-end;
+    padding: 0 6px 14px;
     opacity: var(--opacity, 1);
-    transition: opacity 1000ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity var(--hero-ms, 380ms) cubic-bezier(0.24, 0.9, 0.32, 1);
     cursor: pointer;
     text-decoration: none;
     color: inherit;
@@ -408,10 +440,11 @@
     display: flex;
     align-items: flex-end;
     justify-content: center;
-    height: var(--char-h, 64%);
-    max-height: calc(100% - 54px);
+    /* Fill the available height above the label */
+    flex: 1 1 0;
+    min-height: 0;
     width: 100%;
-    transition: height 1000ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: height var(--hero-ms, 380ms) cubic-bezier(0.24, 0.9, 0.32, 1);
   }
 
   .hero-character-img {
@@ -438,46 +471,87 @@
       rgba(12, 18, 24, 0.03) 50%,
       rgba(12, 18, 24, 0) 78%
     );
-    transition: opacity 1000ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity var(--hero-ms, 380ms) cubic-bezier(0.24, 0.9, 0.32, 1);
     opacity: var(--opacity, 1);
     pointer-events: none;
   }
 
-  /* Name sits under the shoes, not over the legs */
+  /* ── Name + price ── plain text stacked BELOW the shoes, never on the figure.
+     The figure lane flexes above it, so the label can never ride up the legs. */
   .hero-label {
-    position: relative;
-    display: inline-flex;
-    align-items: baseline;
-    justify-content: center;
-    gap: 8px;
-    max-width: 100%;
-    margin-top: 10px;
-    border-radius: 999px;
-    border: 1px solid rgba(255, 255, 255, 0.95);
-    background: rgba(255, 255, 255, 0.94);
-    padding: 8px 14px;
-    font-size: 13.5px;
-    font-weight: 500;
-    letter-spacing: -0.01em;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    max-width: 94%;
+    margin-top: 14px;
+    text-align: center;
     color: var(--foreground);
-    box-shadow: 0 8px 20px rgba(12, 18, 24, 0.09);
     pointer-events: none;
   }
   .hero-label-name {
     min-width: 0;
+    max-width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-size: 13.5px;
+    font-weight: 600;
+    letter-spacing: 0.002em;
   }
   .hero-label-price {
-    flex-shrink: 0;
     font-variant-numeric: tabular-nums;
-    color: rgba(12, 18, 24, 0.62);
+    color: rgba(12, 18, 24, 0.55);
+    font-weight: 500;
+    font-size: 12.5px;
+  }
+  /* Side characters: quieter label so the eye stays on the centre look */
+  .hero-slide:not([data-center="true"]) .hero-label {
+    opacity: 0.72;
+  }
+  .hero-slide:not([data-center="true"]) .hero-label-name {
+    font-size: 11.5px;
     font-weight: 500;
   }
-  .hero-slide:not([data-center="true"]) .hero-label {
-    font-size: 12.5px;
-    padding: 6px 12px;
+  .hero-slide:not([data-center="true"]) .hero-label-price {
+    font-size: 10.5px;
+  }
+  @media (max-width: 640px) {
+    .hero-label-name { font-size: 12.5px; }
+    .hero-label-price { font-size: 11.5px; }
+    .hero-label { margin-top: 10px; }
+  }
+
+  /* ── Nav arrow buttons ── */
+  .hero-arrow {
+    position: absolute;
+    top: 50%;
+    z-index: 20;
+    transform: translateY(-50%);
+    display: grid;
+    place-items: center;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.90);
+    border: 1px solid rgba(255, 255, 255, 0.95);
+    box-shadow: 0 8px 24px rgba(12, 18, 24, 0.10), inset 0 1px 0 rgba(255,255,255,0.9);
+    color: var(--foreground);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    transition: background 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+    cursor: pointer;
+  }
+  .hero-arrow:hover {
+    background: #fff;
+    box-shadow: 0 12px 32px rgba(12, 18, 24, 0.15), inset 0 1px 0 rgba(255,255,255,1);
+    transform: translateY(-50%) scale(1.06);
+  }
+  .hero-arrow--left  { left:  clamp(4px, 1vw, 14px); }
+  .hero-arrow--right { right: clamp(4px, 1vw, 14px); }
+  @media (max-width: 640px) {
+    .hero-arrow { width: 40px; height: 40px; }
   }
 
   /* ── Dot indicators ── */

@@ -3,7 +3,11 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { formatPrice, looks } from "@/data/catalog";
 import { Link } from "@/router";
 
-const SLIDE_MS = 1000;
+// ── Timing ──────────────────────────────────────────────────────────────────
+// Fast slide: 340 ms with an aggressive ease-out so the change of character
+// feels instant but still shows every figure moving together.
+const SLIDE_MS = 340;
+// We triple the slides so the wrap-around jump is invisible
 const COPIES = 3;
 const N = looks.length;
 
@@ -35,6 +39,7 @@ function useVisibleCount() {
   return visible;
 }
 
+/** After sliding, snap cursor back into the middle copy so we can loop forever. */
 function wrapToMiddle(index: number) {
   let next = index;
   while (next < N) next += N;
@@ -42,6 +47,7 @@ function wrapToMiddle(index: number) {
   return next;
 }
 
+/** Pick the shortest circular path so clicking any dot feels instant. */
 function shortestDelta(fromLogical: number, toLogical: number) {
   let delta = toLogical - fromLogical;
   if (delta > N / 2) delta -= N;
@@ -50,16 +56,16 @@ function shortestDelta(fromLogical: number, toLogical: number) {
 }
 
 function charHeight(absOffset: number, isCenter: boolean) {
-  if (isCenter) return "78%";
-  if (absOffset === 1) return "64%";
-  return "58%";
+  if (isCenter) return "80%";
+  if (absOffset === 1) return "65%";
+  return "57%";
 }
 
 export function HeroCarousel() {
   const visible = useVisibleCount();
   const half = Math.floor(visible / 2);
 
-  // Cursor is an index into the triplicated slide list. Middle copy starts at N.
+  // Cursor lives inside the triplicated list; middle copy starts at N.
   const [cursor, setCursor] = useState(N);
   const [animating, setAnimating] = useState(false);
   const [instant, setInstant] = useState(false);
@@ -77,12 +83,13 @@ export function HeroCarousel() {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (jumpRef.current) clearTimeout(jumpRef.current);
     timerRef.current = setTimeout(() => {
+      // Snap to the middle copy without animation so the loop is seamless.
       setInstant(true);
       setCursor((c) => wrapToMiddle(c));
       jumpRef.current = setTimeout(() => {
         setInstant(false);
         setAnimating(false);
-      }, 24);
+      }, 20);
     }, SLIDE_MS);
   };
 
@@ -94,6 +101,7 @@ export function HeroCarousel() {
   }, []);
 
   const windowStart = cursor - half;
+  // Build the full triplicated list once; each entry carries its absolute index.
   const slides = Array.from({ length: COPIES * N }, (_, index) => ({
     index,
     look: looks[index % N],
@@ -102,6 +110,8 @@ export function HeroCarousel() {
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType === "mouse" && event.button !== 0) return;
     pointerRef.current = { id: event.pointerId, x: event.clientX };
+    // A fresh press is never a swipe — only a real drag can set the flag.
+    swipedRef.current = false;
   };
 
   const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
@@ -109,7 +119,7 @@ export function HeroCarousel() {
     pointerRef.current = null;
     if (!start || start.id !== event.pointerId) return;
     const dx = event.clientX - start.x;
-    if (Math.abs(dx) < 56) return;
+    if (Math.abs(dx) < 40) return; // lower threshold for snappier swipe
     swipedRef.current = true;
     go(dx < 0 ? 1 : -1);
   };
@@ -120,35 +130,29 @@ export function HeroCarousel() {
       className="relative flex flex-col overflow-hidden pt-[92px] hero-section max-md:pb-4"
     >
       <div className="relative flex min-h-0 flex-1 items-end hero-stage">
+        {/* ── Prev arrow ── */}
         <button
           type="button"
           aria-label="Previous look"
           onClick={() => go(-1)}
-          className="glass absolute left-[clamp(4px,1vw,14px)] top-1/2 z-20 -translate-y-1/2 grid size-[52px] place-items-center rounded-full bg-white/88 text-foreground transition-all hover:bg-white max-sm:size-[44px]"
+          className="hero-arrow hero-arrow--left"
         >
           <ArrowLeft className="size-[19px] max-sm:size-[15px]" strokeWidth={1.7} />
         </button>
 
+        {/* ── Slide track ── */}
         <div
           role="group"
           aria-label="Look carousel"
           aria-roledescription="carousel"
           tabIndex={0}
           onKeyDown={(e) => {
-            if (e.key === "ArrowLeft") {
-              e.preventDefault();
-              go(-1);
-            }
-            if (e.key === "ArrowRight") {
-              e.preventDefault();
-              go(1);
-            }
+            if (e.key === "ArrowLeft") { e.preventDefault(); go(-1); }
+            if (e.key === "ArrowRight") { e.preventDefault(); go(1); }
           }}
           onPointerDown={onPointerDown}
           onPointerUp={onPointerUp}
-          onPointerCancel={() => {
-            pointerRef.current = null;
-          }}
+          onPointerCancel={() => { pointerRef.current = null; }}
           className="relative h-full w-full overflow-hidden"
           style={{ "--half": half, "--vis": visible } as CSSProperties}
         >
@@ -177,6 +181,7 @@ export function HeroCarousel() {
                       swipedRef.current = false;
                       return;
                     }
+                    // Clicking any non-centre character slides it to the centre.
                     if (!isCenter) {
                       e.preventDefault();
                       go(offset);
@@ -187,13 +192,12 @@ export function HeroCarousel() {
                       "--offset": offset,
                       "--char-h": charHeight(abs, isCenter),
                       "--opacity": isVisible
-                        ? isCenter
-                          ? 1
-                          : Math.max(0.7, 1 - 0.12 * abs)
+                        ? isCenter ? 1 : Math.max(0.65, 1 - 0.14 * abs)
                         : 0,
                     } as CSSProperties
                   }
                 >
+                  {/* Character image fills most of the slide height */}
                   <span className="hero-figure">
                     <span aria-hidden className="hero-cast" />
                     <img
@@ -205,6 +209,8 @@ export function HeroCarousel() {
                       className="hero-character-img"
                     />
                   </span>
+
+                  {/* Label sits BELOW the shoes, outside / after the figure */}
                   {isVisible && (
                     <span className="hero-label">
                       <span className="hero-label-name">{look.name}</span>
@@ -217,16 +223,18 @@ export function HeroCarousel() {
           </div>
         </div>
 
+        {/* ── Next arrow ── */}
         <button
           type="button"
           aria-label="Next look"
           onClick={() => go(1)}
-          className="glass absolute right-[clamp(4px,1vw,14px)] top-1/2 z-20 -translate-y-1/2 grid size-[52px] place-items-center rounded-full bg-white/88 text-foreground transition-all hover:bg-white max-sm:size-[44px]"
+          className="hero-arrow hero-arrow--right"
         >
           <ArrowRight className="size-[19px] max-sm:size-[15px]" strokeWidth={1.7} />
         </button>
       </div>
 
+      {/* ── Dot indicators ── */}
       <div className="flex justify-center gap-[6px] mt-3 mb-1" role="tablist" aria-label="Looks">
         {looks.map((look, idx) => (
           <button
@@ -241,10 +249,11 @@ export function HeroCarousel() {
         ))}
       </div>
 
+      {/* ── Collection bar ── */}
       <div className="glass mx-[var(--gutter)] mt-2 flex h-[74px] items-center justify-between gap-4 rounded-[20px] pl-[22px] pr-3 max-md:h-auto max-md:flex-col max-md:items-stretch max-md:gap-2.5 max-md:px-4 max-md:py-3.5">
         <div className="flex min-w-0 items-baseline gap-4">
-          <span className="whitespace-nowrap text-[15px] font-medium">Fall / Winter 26</span>
-          <span className="whitespace-nowrap text-[13.5px] tabular-nums text-foreground/60">
+          <span className="whitespace-nowrap text-[15px] font-semibold tracking-tight">Fall / Winter 26</span>
+          <span className="whitespace-nowrap text-[13.5px] tabular-nums text-foreground/55">
             {looks.length} looks
           </span>
         </div>
